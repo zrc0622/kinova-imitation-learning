@@ -105,7 +105,7 @@ def plot_np(nparry):
     ax = fig.add_subplot(111, projection='3d', label = 'test')
 
     # 绘制轨迹线
-    ax.plot(x, y, z, marker='o', markersize=5)
+    ax.plot(x, y, z, marker='o', markersize=1)
 
     # 绘制标准轨迹
     data = pd.read_csv("B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv", header=None)
@@ -115,7 +115,7 @@ def plot_np(nparry):
     x = npstate[:, 0]
     y = npstate[:, 1]
     z = npstate[:, 2]
-    ax.plot(x, y, z, marker='o', label="standard")  # 使用文件名作为标签
+    ax.plot(x, y, z, marker='o', label="standard", markersize=1)  # 使用文件名作为标签
 
 
     # 设置坐标轴标签

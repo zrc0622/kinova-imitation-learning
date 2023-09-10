@@ -1,1 +1,1 @@
-data = pd.read_csv(data_dir, header=None)
+10
