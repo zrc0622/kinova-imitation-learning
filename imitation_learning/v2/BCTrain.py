@@ -1,5 +1,7 @@
 # 三层隐层 √
-# 归一化
+# 归一化 √
+# 三帧叠加 √
+# 修复数据问题
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -16,6 +18,8 @@ import os
 
 from readdata import read_all_data
 from plot import plot_np
+
+import glob
 
 def normalize_data(data):
     min_vals = np.array([0.299900302, -0.17102845, 0.05590736, -0.000087572115])
@@ -40,42 +44,67 @@ def overlay_frames(state, action, frame_length):
     return np.array(inputs), np.array(outputs)
 
 # data
-def read_data(if_all, if_delt, if_test):
-    if not if_test:
-        # dir = str(Path.cwd())
-        # data_dir = "./data/rule/data1.csv"
-        # csv_dir = "./data/rule/"
-        data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv"
-        csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+def read_data(if_all, if_delt, if_test, frame):
+    if frame == 1 or if_test:
+        if not if_test:
+            # dir = str(Path.cwd())
+            # data_dir = "./data/rule/data1.csv"
+            # csv_dir = "./data/rule/"
+            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv"
+            csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
 
-        if if_all:
-            data = read_all_data(csv_dir)
+            if if_all:
+                data = read_all_data(csv_dir)
+            else:
+                data = pd.read_csv(data_dir, header=None)
+
+            state = data.iloc[0].to_numpy()
+            npstate = np.array([np.fromstring(item[1:-1], sep=' ')
+                            for item in state])  # 将state变为(?, 4)的格式，一行代表一个state
+            action = data.iloc[1].to_numpy()
+            npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
+            npstate = normalize_data(npstate)
+            npaction = normalize_data(npaction)
+            if if_delt:
+                npaction = npaction - npstate # 使用相对值
+            return npstate, npaction
         else:
+            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/test/data5.csv"
             data = pd.read_csv(data_dir, header=None)
-
-        state = data.iloc[0].to_numpy()
-        npstate = np.array([np.fromstring(item[1:-1], sep=' ')
-                        for item in state])  # 将state变为(?, 4)的格式，一行代表一个state
-        action = data.iloc[1].to_numpy()
-        npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
-        npstate = normalize_data(npstate)
-        npaction = normalize_data(npaction)
-        if if_delt:
-            npaction = npaction - npstate # 使用相对值
-        return npstate, npaction
+            state = data.iloc[0].to_numpy()
+            npstate = np.array([np.fromstring(item[1:-1], sep=' ')
+                            for item in state])  # 将state变为(?, 4)的格式，一行代表一个state
+            action = data.iloc[1].to_numpy()
+            npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
+            npstate = normalize_data(npstate)
+            npaction = normalize_data(npaction)
+            if if_delt:
+                npaction = npaction - npstate # 使用相对值
+            return npstate, npaction
     else:
-        data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/test/data5.csv"
-        data = pd.read_csv(data_dir, header=None)
-        state = data.iloc[0].to_numpy()
-        npstate = np.array([np.fromstring(item[1:-1], sep=' ')
-                        for item in state])  # 将state变为(?, 4)的格式，一行代表一个state
-        action = data.iloc[1].to_numpy()
-        npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
-        npstate = normalize_data(npstate)
-        npaction = normalize_data(npaction)
-        if if_delt:
-            npaction = npaction - npstate # 使用相对值
-        return npstate, npaction
+        npstates = []
+        npactions = []
+        csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+        csv_files = glob.glob(csv_dir + "*.csv")
+        for file in csv_files:
+            data = pd.read_csv(file, header=None)
+            state = data.iloc[0].to_numpy()
+            npstate = np.array([np.fromstring(item[1:-1], sep=' ')
+                            for item in state])  # 将state变为(?, 4)的格式，一行代表一个state
+            action = data.iloc[1].to_numpy()
+            npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
+            npstate = normalize_data(npstate)
+            npaction = normalize_data(npaction)
+            if if_delt:
+                npaction = npaction - npstate # 使用相对值
+            lay_state, lay_action = overlay_frames(npstate, npaction, frame)
+            npstates.append(lay_state)
+            npactions.append(lay_action)
+        npstates = np.vstack(npstates)
+        npactions = np.vstack(npactions)
+        # print(npstates.shape)
+        # print(npactions.shape)
+        return npstates, npactions
 
 def run_model(model, initial_input, num_steps, frame):
     outputs = []  # 存储模型输出的列表
@@ -124,8 +153,8 @@ def main1():
     out_dim = 4
     learning_rate = 0.0001
     batch_size = 64
-    epochs = 20000
-    save_interval = 5000
+    epochs = 100000
+    save_interval = 10000
 
     if_train = False
     if_test = False
@@ -148,7 +177,7 @@ def main1():
         criterion = nn.MSELoss()  # 损失函数：均方损失
         # criterion = nn.NLLLoss()  # 损失函数：负对数似然损失
         optimizer = optim.Adam(model.parameters(), lr=learning_rate) # 优化器
-        npstate, npaciton = read_data(if_all=True, if_delt=False, if_test=False) # 全部、不绝对值、不测试
+        npstate, npaciton = read_data(if_all=True, if_delt=False, if_test=False, frame=1) # 全部、不绝对值、不测试
         dataset = TensorDataset(torch.Tensor(npstate), torch.Tensor(npaciton))
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True) # shuffle=true打乱顺序抽取数据
         with tqdm(total=epochs, desc="Processing") as pbar:
@@ -175,7 +204,7 @@ def main1():
 
     if if_test:
         # 读取测试数据
-        test_npstate, test_npaction = read_data(False, False, True)
+        test_npstate, test_npaction = read_data(False, False, True, frame=1)
 
         # 将测试数据转换为PyTorch张量
         test_state_tensor = torch.Tensor(test_npstate)
@@ -210,13 +239,14 @@ def main1():
 
 def main2():
     # parameter
-    frame = 3 # 叠加帧数
+    frame = 4 # 叠加帧数
     input_dim = 4*frame
     out_dim = 4
-    learning_rate = 0.0001
+    learning_rate = 0.001
     batch_size = 64
-    epochs = 20000
-    save_interval = 5000
+    epochs = 100000
+    save_interval = 20000
+    print_loss = 10000
 
     if_train = False
     if_test = False
@@ -239,9 +269,9 @@ def main2():
         criterion = nn.MSELoss()  # 损失函数：均方损失
         # criterion = nn.NLLLoss()  # 损失函数：负对数似然损失
         optimizer = optim.Adam(model.parameters(), lr=learning_rate) # 优化器
-        npstate, npaciton = read_data(if_all=True, if_delt=False, if_test=False) # 全部、不绝对值、不测试
+        npstate, npaciton = read_data(if_all=True, if_delt=False, if_test=False, frame=frame) # 全部、不绝对值、不测试
 
-        npstate, npaciton = overlay_frames(npstate, npaciton, frame)
+        # npstate, npaciton = overlay_frames(npstate, npaciton, frame)
 
         dataset = TensorDataset(torch.Tensor(npstate), torch.Tensor(npaciton))
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True) # shuffle=true打乱顺序抽取数据
@@ -257,7 +287,7 @@ def main2():
                     total_loss += loss.item()
                 avg_loss = total_loss / len(dataloader)
                 writer.add_scalar('avg_loss', avg_loss, epoch)
-                if (epoch + 1) % 1000 == 0:
+                if (epoch + 1) % print_loss == 0:
                     print("epoch: {},    loss: {:.6f}".format(epoch, avg_loss*10000000)) # loss = 35.9
 
                 # save model
@@ -269,7 +299,7 @@ def main2():
 
     if if_test:
         # 读取测试数据
-        test_npstate, test_npaction = read_data(False, False, True)
+        test_npstate, test_npaction = read_data(False, False, True, frame=frame)
 
         test_npstate, test_npaction = overlay_frames(test_npstate, test_npaction, frame)
 
@@ -295,17 +325,19 @@ def main2():
 
     if if_run_model:
         with torch.no_grad():
-            model_path = 'B:/code/kortex/imitation_learning/v2/run/9_8_13_15/model_epoch20000.pth'
+            model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\run\\9_9_19_23\\model_epoch20000.pth'
             model = BehaviorCloningModel(input_dim, out_dim)
             model.load_state_dict(torch.load(model_path))
-            initial_input = normalize_data(np.array([[ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03],[2.99932234e-01, 1.24275835e-04, 2.99952932e-01, 4.80660593e-04],[2.99923132e-01, 6.25820728e-05, 2.99937792e-01, 3.69983390e-03]]))
+            initial_input = normalize_data(np.array([[ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03],[2.99932234e-01, 1.24275835e-04, 2.99952932e-01, 4.80660593e-04],[2.99923132e-01, 6.25820728e-05, 2.99937792e-01, 3.69983390e-03],[2.99923132e-01, 6.25820728e-05, 2.99937792e-01, 3.69983390e-03]]))
             initial_input = initial_input.flatten()
             print(initial_input)
-            outputs = run_model(model, initial_input, num_steps=400, frame=frame)
+            outputs = run_model(model, initial_input, num_steps=1462, frame=frame)
             outputs = np.array(outputs)
             outputs = origin_data(outputs)
             print(outputs)
             plot_np(outputs)
 
 if __name__ == '__main__':
-    main2()
+    # main1 为普通的全连接网络
+    # main2 为使用了帧叠加
+    main2() 
