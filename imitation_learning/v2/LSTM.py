@@ -43,7 +43,7 @@ criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
 # 训练模型
-num_epochs = 20000
+num_epochs = 10000
 for epoch in range(num_epochs):
     optimizer.zero_grad()
     hidden = None
@@ -61,7 +61,7 @@ torch.save(model.state_dict(), 'rnn_model_five.pth')
 
 # 初始输入
 initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))
-initial_input = torch.tensor(initial_input, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+initial_input = torch.tensor(initial_input, dtype=torch.float32).unsqueeze(0).unsqueeze(0) # lstm的输入形状为(batch_size, time_steps, input_features)
 
 # 预测轨迹
 trajectory = [initial_input]
