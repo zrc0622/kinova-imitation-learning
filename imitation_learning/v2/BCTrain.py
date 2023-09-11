@@ -2,6 +2,7 @@
 # 归一化 √
 # 三帧叠加 √
 # 修复数据问题
+# lstm序列头尾分割
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -33,6 +34,7 @@ def origin_data(data):
     origin_data_data = (max_vals - min_vals) * data + min_vals
     return origin_data_data
 
+# 叠加帧
 def overlay_frames(state, action, frame_length):
     inputs = []
     outputs = []
@@ -43,7 +45,7 @@ def overlay_frames(state, action, frame_length):
         outputs.append(output_sequence)
     return np.array(inputs), np.array(outputs)
 
-# data
+# 读取数据
 def read_data(if_all, if_delt, if_test, frame):
     if frame == 1 or if_test:
         if not if_test:
@@ -106,6 +108,7 @@ def read_data(if_all, if_delt, if_test, frame):
         # print(npactions.shape)
         return npstates, npactions
 
+# 测试模型
 def run_model(model, initial_input, num_steps, frame):
     outputs = []  # 存储模型输出的列表
     current_input = initial_input  # 初始输入
@@ -131,7 +134,32 @@ def run_model(model, initial_input, num_steps, frame):
             current_input = output_array
     return outputs
 
-# net
+def run_model_for_lstm(model, initial_input, num_steps, frame):
+    outputs = []  # 存储模型输出的列表
+    current_input = initial_input  # 初始输入
+
+    for step in range(num_steps):
+        # 将当前输入转换为 PyTorch 张量，添加批次和序列长度维度
+        input_tensor = torch.Tensor(current_input).unsqueeze(0).unsqueeze(0)
+
+        # 使用模型进行推断
+        with torch.no_grad():
+            output_tensor = model(input_tensor)
+
+        # 将输出添加到列表中
+        output_array = output_tensor.numpy()
+        outputs.append(output_array)
+
+        current_input = current_input[4:]
+
+        # 将模型的输出作为下一个步骤的输入
+        if frame != 1:
+            current_input = np.concatenate((current_input, output_array[0, 0]))
+        else:
+            current_input = output_array[0, 0]
+    return outputs
+
+# MLP网络
 class BehaviorCloningModel(nn.Module):  # 搭建神经网络
     def __init__(self, input_dim, output_dim):
         super(BehaviorCloningModel, self).__init__()  # 继承自父类的构造
@@ -147,6 +175,20 @@ class BehaviorCloningModel(nn.Module):  # 搭建神经网络
     def forward(self, x):  # 前向传播方法
         return self.fc(x)
 
+# LSTM网络
+class TrajectoryGenerator(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size):
+        super(TrajectoryGenerator, self).__init__()
+        self.hidden_size = hidden_size
+        self.lstm = nn.LSTM(input_size, hidden_size, batch_first=True)
+        self.fc = nn.Linear(hidden_size, output_size)
+
+    def forward(self, x):
+        out, _ = self.lstm(x)
+        out = self.fc(out)
+        return out
+
+# MLP
 def main1():
     # parameter
     input_dim = 4
@@ -170,7 +212,7 @@ def main1():
     # train
     if if_train:
         time = datetime.now()
-        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "MLP_run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir)
         model = BehaviorCloningModel(input_dim, out_dim)  # 使用BC进行训练
@@ -216,7 +258,7 @@ def main1():
                 predicted_actions = model(test_state_tensor)
         else:
             with torch.no_grad():
-                model_path = 'B:/code/kortex/imitation_learning/v2/run/9_7_17_42/model_epoch50000.pth'
+                model_path = 'B:/code/kortex/imitation_learning/v2/MLP_run/9_7_17_42/model_epoch50000.pth'
                 model = BehaviorCloningModel(4, 4)
                 model.load_state_dict(torch.load(model_path))
                 predicted_actions = model(test_state_tensor)
@@ -228,7 +270,7 @@ def main1():
 
     if if_run_model:
         with torch.no_grad():
-            model_path = 'B:/code/kortex/imitation_learning/v2/run/9_8_10_59/model_epoch20000.pth'
+            model_path = 'B:/code/kortex/imitation_learning/v2/MLP_run/9_8_10_59/model_epoch20000.pth'
             model = BehaviorCloningModel(4, 4)
             model.load_state_dict(torch.load(model_path))
             outputs = run_model(model, initial_input=normalize_data(np.array([0.3, 0, 0.3, 0])), num_steps=400, frame=1)
@@ -237,20 +279,21 @@ def main1():
             print(outputs)
             plot_np(outputs)
 
+# 帧叠加MLP
 def main2():
     # parameter
-    frame = 4 # 叠加帧数
+    frame = 6 # 叠加帧数
     input_dim = 4*frame
     out_dim = 4
     learning_rate = 0.001
     batch_size = 64
-    epochs = 100000
-    save_interval = 20000
+    epochs = 50000
+    save_interval = 10000
     print_loss = 10000
 
-    if_train = False
+    if_train = True
     if_test = False
-    if_run_model = True
+    if_run_model = False
 
     # # 测试最大最小值
     # npstate, npaciton = read_data(if_all=True,if_delt=False,if_test=False)
@@ -262,7 +305,7 @@ def main2():
     # train
     if if_train:
         time = datetime.now()
-        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "MLP_run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir)
         model = BehaviorCloningModel(input_dim, out_dim)  # 使用BC进行训练
@@ -313,7 +356,7 @@ def main2():
                 predicted_actions = model(test_state_tensor)
         else:
             with torch.no_grad():
-                model_path = 'B:/code/kortex/imitation_learning/v2/run/9_8_13_15/model_epoch20000.pth'
+                model_path = 'B:/code/kortex/imitation_learning/v2/MLP_run/9_8_13_15/model_epoch20000.pth'
                 model = BehaviorCloningModel(input_dim, out_dim)
                 model.load_state_dict(torch.load(model_path))
                 predicted_actions = model(test_state_tensor)
@@ -325,7 +368,7 @@ def main2():
 
     if if_run_model:
         with torch.no_grad():
-            model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\run\\9_9_19_23\\model_epoch20000.pth'
+            model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\MLP_run\\9_9_19_23\\model_epoch20000.pth'
             model = BehaviorCloningModel(input_dim, out_dim)
             model.load_state_dict(torch.load(model_path))
             initial_input = normalize_data(np.array([[ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03],[2.99932234e-01, 1.24275835e-04, 2.99952932e-01, 4.80660593e-04],[2.99923132e-01, 6.25820728e-05, 2.99937792e-01, 3.69983390e-03],[2.99923132e-01, 6.25820728e-05, 2.99937792e-01, 3.69983390e-03]]))
@@ -337,7 +380,77 @@ def main2():
             print(outputs)
             plot_np(outputs)
 
+# LSTM网络
+def main3():
+    # 初始化模型
+    input_size = 4  # 输入特征数
+    hidden_size = 64  # 隐藏层大小
+    output_size = 4  # 输出特征数（与输入的特征数相同）
+    model = TrajectoryGenerator(input_size, hidden_size, output_size)
+    time = datetime.now()
+    log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "LSTM_run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+    
+
+    # 定义损失函数和优化器
+    criterion = nn.MSELoss()
+    optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+    # 读取数据
+    states, actions = read_data(False, False, False, 1)
+
+    states = torch.Tensor(states)
+    actions = torch.Tensor(actions)
+
+    epochs = 50000
+    batch_size = 32
+
+    if_train = False
+    if_run_model = True
+
+    if if_train:
+        os.makedirs(log_dir, exist_ok=True)
+        writer = SummaryWriter(log_dir)
+        with tqdm(total=epochs, desc="Processing") as pbar:
+            for epoch in range(epochs):
+                total_loss = 0.0
+                for i in range(0, states.shape[0], batch_size):
+                    inputs = states[i:i+batch_size]
+                    targets = actions[i:i+batch_size]
+
+                    optimizer.zero_grad()
+                    outputs = model(inputs)
+                    loss = criterion(outputs, targets)
+                    loss.backward()
+                    optimizer.step()
+                    total_loss += loss.item()
+                avg_loss = total_loss / states.shape[0]
+                if (epoch + 1) % 500 == 0:
+                    print(f"epoch:{epoch}  loss:{avg_loss*10000000}")
+                if (epoch + 1) % 100 == 0:
+                    model_sava_path = os.path.join(log_dir, f'model_epoch{epoch + 1}.pth')
+                    torch.save(model.state_dict(), model_sava_path)
+                writer.add_scalar('avg_loss', avg_loss, epoch)
+                pbar.update(1) # 进度条+1
+    
+    # 使用模型生成轨迹
+    if if_run_model:
+        with torch.no_grad():
+            model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\LSTM_run\\9_11_12_1\\model_epoch500.pth'
+            model = TrajectoryGenerator(input_size, hidden_size, output_size)
+            model.load_state_dict(torch.load(model_path))
+            initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))
+            initial_input = initial_input.flatten()
+            outputs = run_model_for_lstm(model, initial_input, num_steps=200, frame=1)
+            outputs = np.array(outputs)
+            outputs = outputs.reshape(200,4)
+            outputs = origin_data(outputs)
+            print(outputs.shape)
+            
+            plot_np(outputs)
+
+
 if __name__ == '__main__':
     # main1 为普通的全连接网络
-    # main2 为使用了帧叠加
+    # main2 为使用了帧叠加的全连接网络
+    # main3 为LSTM网络
     main2() 
