@@ -343,8 +343,8 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
                     total_loss += loss.item()
                 avg_loss = total_loss / len(dataloader)
                 writer.add_scalar('avg_loss', avg_loss, epoch)
-                if (epoch + 1) % print_loss == 0:
-                    print("epoch: {},    loss: {:.6f}".format(epoch, avg_loss*10000000)) # loss = 35.9
+                # if (epoch + 1) % print_loss == 0:
+                #     print("epoch: {},    loss: {:.6f}".format(epoch, avg_loss*10000000)) # loss = 35.9
 
                 # save model
                 if (epoch + 1) % save_interval == 0:
@@ -422,7 +422,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
         os.makedirs(log_dir, exist_ok=True) 
         save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data)
         writer = SummaryWriter(log_dir)
-        num_epochs = 40000
+        num_epochs = 80000
         with tqdm(total=num_epochs, desc="Processing") as pbar:
             for epoch in range(num_epochs):
                 optimizer.zero_grad()
@@ -449,7 +449,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
         model.load_state_dict(torch.load(model_path))
 
         initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))
-        initial_input = torch.tensor(initial_input, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        initial_input = torch.tensor(initial_input, dtype=torch.float32).unsqueeze(0).unsqueeze(0) # (batch, time, feature)
         
         # 预测轨迹
         trajectory = [initial_input]
