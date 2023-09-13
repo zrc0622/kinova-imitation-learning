@@ -5,6 +5,7 @@
 # lstm多序列问题（序列头尾相接）
 # lstm死循环问题（在数据密集处易死循环，尝试增大学习率跳出）——貌似增大epoch可以解决
 # delt 测试
+# lstm 单数据过拟合(修改保存model方式，比较loss来决定是否保存)
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -20,7 +21,7 @@ from datetime import datetime
 import os
 
 from readdata import read_all_data
-from plot import plot_np
+from plot import plot_np, plot_all
 
 import glob
 
@@ -63,8 +64,12 @@ def read_data(if_all, if_delt, if_test, frame):
             # dir = str(Path.cwd())
             # data_dir = "./data/rule/data1.csv"
             # csv_dir = "./data/rule/"
-            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv"
-            csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+            
+            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv"
+            # csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+
+            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
+            csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
 
             if if_all:
                 data = read_all_data(csv_dir)
@@ -82,7 +87,8 @@ def read_data(if_all, if_delt, if_test, frame):
                 npaction = npaction - npstate # 使用相对值
             return npstate, npaction
         else:
-            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/test/data5.csv"
+            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/test/data5.csv"
+            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data5.csv"
             data = pd.read_csv(data_dir, header=None)
             state = data.iloc[0].to_numpy()
             npstate = np.array([np.fromstring(item[1:-1], sep=' ')
@@ -97,7 +103,7 @@ def read_data(if_all, if_delt, if_test, frame):
     else:
         npstates = []
         npactions = []
-        csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+        csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
         csv_files = glob.glob(csv_dir + "*.csv")
         for file in csv_files:
             data = pd.read_csv(file, header=None)
@@ -298,7 +304,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
     out_dim = 4
     learning_rate = 0.001
     batch_size = 64
-    epochs = 50000
+    epochs = 300000
     save_interval = 5000
     print_loss = 10000
 
@@ -317,7 +323,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
     if if_train:
         
         time = datetime.now()
-        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "MLP_run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "MLP_run\\" + "new_run\\" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
         os.makedirs(log_dir, exist_ok=True)
         save_parameters_to_txt(log_dir = log_dir, frame = frame, learning_rate = learning_rate, batch_size = batch_size, if_all = if_all_data)
         writer = SummaryWriter(log_dir)
@@ -381,14 +387,14 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
 
     if if_run_model:
         with torch.no_grad():
-            model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\MLP_run\\9_11_16_56\\model_epoch50000.pth'
+            model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\MLP_run\\new_run\\9_13_15_44\\model_epoch50000.pth'
             model = MLPModel(input_dim, out_dim)
             model.load_state_dict(torch.load(model_path))
-            initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))
+            initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))#[0.32018349 ,-0.00349947 , 0.12678419 , 0.36635616]
             initial_input = np.tile(initial_input, (frame, 1))
             initial_input = initial_input.flatten()
             print(initial_input)
-            outputs = run_model(model, initial_input, num_steps=1462, frame=frame)
+            outputs = run_model(model, initial_input, num_steps=130, frame=frame)
             outputs = np.array(outputs)
             outputs = origin_data(outputs)
             print(outputs)
@@ -400,12 +406,13 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     input_size = 4  # 输入特征数
     hidden_size = 64  # 隐藏层大小
     output_size = 4  # 输出特征数（与输入的特征数相同）
-    batch_size = 64
+    batch_size = 32
     save_model = 5000
     lr = 0.001
+    num_epochs = 300000
     model = LSTMModel(input_size, hidden_size, output_size)
     time = datetime.now()
-    log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "LSTM_run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+    log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "LSTM_run\\" + "new_run\\" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
     
 
     # 定义损失函数和优化器
@@ -422,7 +429,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
         os.makedirs(log_dir, exist_ok=True) 
         save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data)
         writer = SummaryWriter(log_dir)
-        num_epochs = 80000
+
         with tqdm(total=num_epochs, desc="Processing") as pbar:
             for epoch in range(num_epochs):
                 optimizer.zero_grad()
@@ -444,7 +451,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     
     # 使用模型生成轨迹
     if if_run_model:
-        model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\LSTM_run\\9_11_19_44\\model_epoch15000.pth'
+        model_path = 'B:\\code\\kortex\\imitation_learning\\v2\LSTM_run\\new_run\\9_13_15_45\\model_epoch20000.pth'
         model = LSTMModel(input_size, hidden_size, output_size)
         model.load_state_dict(torch.load(model_path))
 
@@ -456,7 +463,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
 
         with torch.no_grad():
             hidden = None
-            for _ in range(400):  # 生成300个时刻的轨迹
+            for _ in range(300):  # 生成300个时刻的轨迹
                 output, hidden = model(trajectory[-1], hidden)
                 trajectory.append(output)
 
@@ -464,6 +471,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
         trajectory = origin_data(torch.cat(trajectory, dim=1).squeeze().numpy())
         
         plot_np(trajectory)
+        
 
 def main():
     parser = argparse.ArgumentParser()
@@ -498,7 +506,11 @@ if __name__ == '__main__':
     # main3 为LSTM网络
     main()
 
+    # csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+    # plot_all(csv_dir)
+
 # python B:\code\kortex\imitation_learning\v2\BCTrain.py --net lstm --train --all_data --frame 1
+# python B:\code\kortex\imitation_learning\v2\BCTrain.py --net lstm --train --frame 1
 # python B:\code\kortex\imitation_learning\v2\BCTrain.py --net lstm --run_model --frame 1
 
 # python B:\code\kortex\imitation_learning\v2\BCTrain.py --net mlp --train --all_data --frame 5

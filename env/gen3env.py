@@ -162,4 +162,3 @@ class gen3env(gym.Env):
             obs[9]=(obs[2]+1)*0.25
         return action,obs
         
-gym.register(id='peg_in_hole-v0', entry_point='gen3env:gen3env')
