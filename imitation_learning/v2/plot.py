@@ -133,5 +133,47 @@ def plot_np(nparry):
 # plot_one(data_dir)
 # plot_all(csv_dir)
 
+def plot_4dnp(nparry):
+    
+    # npstate是笛卡尔坐标数据
+    trajectory = nparry
+
+    # 提取x、y、z坐标
+    x = trajectory[:, 0]
+    y = trajectory[:, 1]
+    z = trajectory[:, 2]
+    a = trajectory[:, 3]
+
+    # 创建三维图像
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d', label = 'test')
+
+    # 绘制轨迹线
+    # ax.plot(x, y, z, marker='o', markersize=1)
+    colors = np.where(a < 0.01, 'green', np.where(a > 0.3, 'red', 'black'))
+    for i in range(1, len(x)):
+        ax.plot([x[i - 1], x[i]], [y[i - 1], y[i]], [z[i - 1], z[i]], c=colors[i], markersize=4)
+
+    # 绘制标准轨迹
+    data = pd.read_csv("B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv", header=None)
+    state = data.iloc[0].to_numpy()
+    npstate = np.array([np.fromstring(item[1:-1], sep=' ')
+                    for item in state])  # 将state变为(?, 4)的格式，一行代表一个state
+    x = npstate[:, 0]
+    y = npstate[:, 1]
+    z = npstate[:, 2]
+    a = npstate[:, 3]
+    
+    ax.plot(x, y, z, marker='o', label="standard", markersize=1)  # 使用文件名作为标签
+
+
+    # 设置坐标轴标签
+    ax.set_xlabel('X轴')
+    ax.set_ylabel('Y轴')
+    ax.set_zlabel('Z轴')
+
+    # 显示图像
+    plt.show()
+
 
 

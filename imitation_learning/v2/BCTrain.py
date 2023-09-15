@@ -21,7 +21,7 @@ from datetime import datetime
 import os
 
 from readdata import read_all_data
-from plot import plot_np, plot_all
+from plot import plot_np, plot_all, plot_4dnp
 
 import glob
 
@@ -398,7 +398,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
             outputs = np.array(outputs)
             outputs = origin_data(outputs)
             print(outputs)
-            plot_np(outputs)
+            plot_4dnp(outputs)
 
 # LSTM网络
 def LSTM_train(if_train, if_test, if_run_model, if_all_data):
@@ -470,7 +470,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
         # 将生成的轨迹转换为 numpy 数组
         trajectory = origin_data(torch.cat(trajectory, dim=1).squeeze().numpy())
         
-        plot_np(trajectory)
+        plot_4dnp(trajectory)
         
 
 def main():
