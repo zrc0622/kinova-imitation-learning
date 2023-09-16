@@ -21,7 +21,7 @@ from datetime import datetime
 import os
 
 from readdata import read_all_data
-from plot import plot_np, plot_all
+from plot import plot_np, plot_all, draw_np, plot_4dnp
 
 import glob
 
@@ -157,13 +157,14 @@ def run_model(model, initial_input, num_steps, frame):
 
     for step in range(num_steps):
         # 将当前输入转换为 PyTorch 张量
-        input_tensor = torch.Tensor(current_input)
+        input_tensor = torch.Tensor(current_input).to('cuda')
 
         # 使用模型进行推断
         with torch.no_grad():
             output_tensor = model(input_tensor)
 
         # 将输出添加到列表中
+        output_tensor = output_tensor.to('cpu')
         output_array = output_tensor.numpy()
         outputs.append(output_array)
 
@@ -332,10 +333,10 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
     # frame = 5 # 叠加帧数
     input_dim = 4*frame
     out_dim = 4
-    learning_rate = 0.001
+    learning_rate = 0.0005
     batch_size = 64
     epochs = 300000
-    save_interval = 5000
+    save_interval = 1000
     print_loss = 10000
 
     # if_train = True
@@ -354,7 +355,9 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
         
         time = datetime.now()
         log_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2" + "/" + "MLP_run/" + "new_run/" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+        plot_dir = log_dir + "/plot"
         os.makedirs(log_dir, exist_ok=True)
+        os.makedirs(plot_dir, exist_ok=True)
         save_parameters_to_txt(log_dir = log_dir, frame = frame, learning_rate = learning_rate, batch_size = batch_size, if_all = if_all_data)
         writer = SummaryWriter(log_dir)
         model = MLPModel(input_dim, out_dim)  # 使用BC进行训练
@@ -391,7 +394,15 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
                 if (epoch + 1) % save_interval == 0:
                     model_save_path = os.path.join(log_dir, f'model_epoch{epoch + 1}.pth')
                     torch.save(model.state_dict(), model_save_path)
-
+                    with torch.no_grad():
+                            initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))#[0.32018349 ,-0.00349947 , 0.12678419 , 0.36635616]
+                            initial_input = np.tile(initial_input, (frame, 1))
+                            initial_input = initial_input.flatten()
+                            outputs = run_model(model, initial_input, num_steps=150, frame=frame)
+                            outputs = np.array(outputs)
+                            outputs = origin_data(outputs)
+                            pic_dir = os.path.join(plot_dir, f'model_epoch{epoch + 1}.png')
+                            plot_4dnp(outputs, pic_dir)
                 pbar.update(1) # 进度条+1
 
     if if_test:
@@ -429,7 +440,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
             initial_input = np.tile(initial_input, (frame, 1))
             initial_input = initial_input.flatten()
             print(initial_input)
-            outputs = run_model(model, initial_input, num_steps=130, frame=frame)
+            outputs = run_model(model, initial_input, num_steps=150, frame=frame)
             outputs = np.array(outputs)
             outputs = origin_data(outputs)
             print(outputs)
@@ -442,9 +453,9 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     hidden_size = 128  # 隐藏层大小
     output_size = 4  # 输出特征数（与输入的特征数相同）
     batch_size = 32
-    save_model = 5000
-    lr = 0.001
-    num_epochs = 300000
+    save_model = 1000
+    lr = 0.0005
+    num_epochs = 100000
     model = LSTMModel(input_size, hidden_size, output_size)
 
     if torch.cuda.is_available():
@@ -453,7 +464,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
 
     time = datetime.now()
     log_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2" + "/" + "LSTM_run/" + "new_run/" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
-    
+    plot_dir = log_dir + "/plot"
 
     # 定义损失函数和优化器
     criterion = nn.MSELoss()
@@ -464,12 +475,13 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
 
     actions = states[1:]
     states = states[:-1]
-
+    draw_state = states[0]
     states = torch.tensor(states, dtype=torch.float32).to("cuda")
     actions = torch.tensor(actions, dtype=torch.float32).to("cuda")
 
     if if_train:
         os.makedirs(log_dir, exist_ok=True) 
+        os.makedirs(plot_dir, exist_ok=True)
         save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data, hidden_size=hidden_size)
         writer = SummaryWriter(log_dir)
 
@@ -478,18 +490,31 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
                 optimizer.zero_grad()
                 hidden = None
                 # 将数据分成批次
-                for i in range(0, states.size(0), batch_size):
-                    batch_states = states[i:i + batch_size]
-                    batch_actions = actions[i:i + batch_size]
-                    outputs, _ = model(batch_states, hidden)
-                    loss = criterion(outputs.squeeze(1), batch_actions)
-                    loss.backward()
-                    optimizer.step()               
+                # for i in range(0, states.size(0), batch_size):
+                batch_states = states#[i:i + batch_size]
+                batch_actions = actions#[i:i + batch_size]
+                outputs, _ = model(batch_states, hidden)
+                loss = criterion(outputs.squeeze(1), batch_actions)
+                loss.backward()
+                optimizer.step()               
                 writer.add_scalar('loss', loss.item(), epoch)
                 pbar.update(1) # 进度条+1
                 if (epoch + 1) % save_model == 0:
                     model_sava_path = os.path.join(log_dir, f'model_epoch{epoch + 1}.pth')
                     torch.save(model.state_dict(), model_sava_path)
+                    with torch.no_grad():
+                        initial_input = draw_state
+                        initial_input = torch.tensor(initial_input, dtype=torch.float32).unsqueeze(0).unsqueeze(0)  # 不指定设备，默认在CPU上
+                        trajectory = [initial_input]
+                        initial_input = initial_input.to('cuda')
+                        hidden = None
+                        for _ in range(300):  # 生成300个时刻的轨迹
+                            output, hidden = model(initial_input, hidden)
+                            trajectory.append(output.to('cpu'))  # 将输出移到CPU上
+                            initial_input = output
+                        trajectory = origin_data(torch.cat(trajectory, dim=1).squeeze().numpy())
+                        pic_dir = os.path.join(plot_dir, f'model_epoch{epoch + 1}.png')
+                        plot_4dnp(trajectory, pic_dir)
 
     
     # 使用模型生成轨迹
