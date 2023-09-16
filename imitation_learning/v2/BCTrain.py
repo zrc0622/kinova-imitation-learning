@@ -27,6 +27,21 @@ import glob
 
 import argparse
 
+#距离过小或夹爪变化小于 gripper_change_deta 删除本组数据
+def data_processing(state, delt, gripper_change_delt):
+    p = state[0,:]
+    delete_line = []
+    for i in range(1,state.shape[0]):
+        distance = np.sum(np.square(p[:3]-state[i][:3]))  
+        gripper_change = abs(p[3]-state[i][3])
+        
+        if(gripper_change <= gripper_change_delt and distance < delt):
+            delete_line.append(i)
+        else:
+            p = state[i]
+    processed_data = np.delete(state,delete_line,0)
+    return processed_data
+
 def normalize_data(data):
     min_vals = np.array([0.299900302, -0.17102845, 0.05590736, -0.000087572115])
     max_vals = np.array([0.58015204, 0.00020189775, 0.299989649, 0.36635616])
@@ -52,24 +67,28 @@ def overlay_frames(state, action, frame_length):
     outputs = []
     for i in range(len(state) - frame_length):
         input_sequence = state[i:(i + frame_length)].flatten()
-        output_sequence = action[i + frame_length]  # 使用npaction的第四行作为输出
+        output_sequence = state[i + frame_length]  # 使用npaction的第四行作为输出
         inputs.append(input_sequence)
         outputs.append(output_sequence)
     return np.array(inputs), np.array(outputs)
 
 # 读取数据
 def read_data(if_all, if_delt, if_test, frame):
+    delt = 5e-6
+    gripper_change_delt = 0.03/(0.36635616+0.000087572115)
+
     if frame == 1 or if_test:
-        if not if_test:
+        # train and frame 1
+        if not if_test: 
             # dir = str(Path.cwd())
             # data_dir = "./data/rule/data1.csv"
             # csv_dir = "./data/rule/"
             
-            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv"
-            # csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv"
+            csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
 
-            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
-            csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
+            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
+            # csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
 
             if if_all:
                 data = read_all_data(csv_dir)
@@ -83,12 +102,15 @@ def read_data(if_all, if_delt, if_test, frame):
             npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
             npstate = normalize_data(npstate)
             npaction = normalize_data(npaction)
+            npstate = data_processing(npstate, delt, gripper_change_delt)
+            npaction = data_processing(npaction, delt, gripper_change_delt)
             if if_delt:
                 npaction = npaction - npstate # 使用相对值
             return npstate, npaction
+        # test
         else:
-            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/test/data5.csv"
-            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data5.csv"
+            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/test/data5.csv"
+            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data5.csv"
             data = pd.read_csv(data_dir, header=None)
             state = data.iloc[0].to_numpy()
             npstate = np.array([np.fromstring(item[1:-1], sep=' ')
@@ -97,13 +119,17 @@ def read_data(if_all, if_delt, if_test, frame):
             npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
             npstate = normalize_data(npstate)
             npaction = normalize_data(npaction)
+            npstate = data_processing(npstate, delt, gripper_change_delt)
+            npaction = data_processing(npaction, delt, gripper_change_delt)
             if if_delt:
                 npaction = npaction - npstate # 使用相对值
             return npstate, npaction
     else:
+        # train and frame not 1
         npstates = []
         npactions = []
-        csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
+        csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+        # csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
         csv_files = glob.glob(csv_dir + "*.csv")
         for file in csv_files:
             data = pd.read_csv(file, header=None)
@@ -114,6 +140,8 @@ def read_data(if_all, if_delt, if_test, frame):
             npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
             npstate = normalize_data(npstate)
             npaction = normalize_data(npaction)
+            npstate = data_processing(npstate, delt, gripper_change_delt)
+            npaction = data_processing(npaction, delt, gripper_change_delt)
             if if_delt:
                 npaction = npaction - npstate # 使用相对值
             lay_state, lay_action = overlay_frames(npstate, npaction, frame)
@@ -388,13 +416,14 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
     if if_run_model:
         with torch.no_grad():
             model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\MLP_run\\new_run\\9_13_15_44\\model_epoch50000.pth'
+            model_path = "C:\\Users\\LEGION\\Desktop\\model_epoch75000.pth"
             model = MLPModel(input_dim, out_dim)
             model.load_state_dict(torch.load(model_path))
             initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))#[0.32018349 ,-0.00349947 , 0.12678419 , 0.36635616]
             initial_input = np.tile(initial_input, (frame, 1))
             initial_input = initial_input.flatten()
             print(initial_input)
-            outputs = run_model(model, initial_input, num_steps=130, frame=frame)
+            outputs = run_model(model, initial_input, num_steps=50, frame=frame)
             outputs = np.array(outputs)
             outputs = origin_data(outputs)
             print(outputs)
@@ -404,12 +433,12 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
 def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     # 初始化模型
     input_size = 4  # 输入特征数
-    hidden_size = 64  # 隐藏层大小
+    hidden_size = 128  # 隐藏层大小
     output_size = 4  # 输出特征数（与输入的特征数相同）
     batch_size = 32
     save_model = 5000
     lr = 0.001
-    num_epochs = 300000
+    num_epochs = 50000
     model = LSTMModel(input_size, hidden_size, output_size)
     time = datetime.now()
     log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "LSTM_run\\" + "new_run\\" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
@@ -422,12 +451,15 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     # 读取数据
     states, actions = read_data(if_all_data, False, False, 1)
 
+    actions = states[1:]
+    states = states[:-1]
+
     states = torch.tensor(states, dtype=torch.float32)
     actions = torch.tensor(actions, dtype=torch.float32)
 
     if if_train:
         os.makedirs(log_dir, exist_ok=True) 
-        save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data)
+        save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data, hidden_size=hidden_size)
         writer = SummaryWriter(log_dir)
 
         with tqdm(total=num_epochs, desc="Processing") as pbar:
@@ -451,11 +483,13 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     
     # 使用模型生成轨迹
     if if_run_model:
-        model_path = 'B:\\code\\kortex\\imitation_learning\\v2\LSTM_run\\new_run\\9_13_15_45\\model_epoch20000.pth'
+        model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\LSTM_run\\new_run\\9_15_19_6\\model_epoch50000.pth'
+        # model_path = "C:\\Users\\LEGION\\Desktop\\model_epoch145000.pth"
         model = LSTMModel(input_size, hidden_size, output_size)
         model.load_state_dict(torch.load(model_path))
 
         initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))
+        # initial_input = normalize_data(np.array([0.32018349 ,-0.00349947 , 0.12678419 , 0.36635616]))
         initial_input = torch.tensor(initial_input, dtype=torch.float32).unsqueeze(0).unsqueeze(0) # (batch, time, feature)
         
         # 预测轨迹
@@ -463,7 +497,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
 
         with torch.no_grad():
             hidden = None
-            for _ in range(300):  # 生成300个时刻的轨迹
+            for _ in range(200):  # 生成300个时刻的轨迹
                 output, hidden = model(trajectory[-1], hidden)
                 trajectory.append(output)
 
