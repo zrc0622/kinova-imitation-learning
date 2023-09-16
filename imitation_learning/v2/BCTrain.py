@@ -27,6 +27,21 @@ import glob
 
 import argparse
 
+#距离过小或夹爪变化小于 gripper_change_deta 删除本组数据
+def data_processing(state, delt, gripper_change_delt):
+    p = state[0,:]
+    delete_line = []
+    for i in range(1,state.shape[0]):
+        distance = np.sum(np.square(p[:3]-state[i][:3]))  
+        gripper_change = abs(p[3]-state[i][3])
+        
+        if(gripper_change <= gripper_change_delt and distance < delt):
+            delete_line.append(i)
+        else:
+            p = state[i]
+    processed_data = np.delete(state,delete_line,0)
+    return processed_data
+
 def normalize_data(data):
     min_vals = np.array([0.299900302, -0.17102845, 0.05590736, -0.000087572115])
     max_vals = np.array([0.58015204, 0.00020189775, 0.299989649, 0.36635616])
@@ -52,24 +67,27 @@ def overlay_frames(state, action, frame_length):
     outputs = []
     for i in range(len(state) - frame_length):
         input_sequence = state[i:(i + frame_length)].flatten()
-        output_sequence = action[i + frame_length]  # 使用npaction的第四行作为输出
+        output_sequence = state[i + frame_length]  # 使用npaction的第四行作为输出
         inputs.append(input_sequence)
         outputs.append(output_sequence)
     return np.array(inputs), np.array(outputs)
 
 # 读取数据
 def read_data(if_all, if_delt, if_test, frame):
+    delt = 5e-6
+    gripper_change_delt = 0.03/(0.36635616+0.000087572115)
+
     if frame == 1 or if_test:
         if not if_test:
             # dir = str(Path.cwd())
             # data_dir = "./data/rule/data1.csv"
             # csv_dir = "./data/rule/"
             
-            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/data1.csv"
-            # csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
+            data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/data1.csv"
+            csv_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/"
 
-            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
-            csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
+            # data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
+            # csv_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/optimize/"
 
             if if_all:
                 data = read_all_data(csv_dir)
@@ -83,12 +101,14 @@ def read_data(if_all, if_delt, if_test, frame):
             npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
             npstate = normalize_data(npstate)
             npaction = normalize_data(npaction)
+            npstate = data_processing(npstate, delt, gripper_change_delt)
+            npaction = data_processing(npaction, delt, gripper_change_delt)
             if if_delt:
                 npaction = npaction - npstate # 使用相对值
             return npstate, npaction
         else:
-            # data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/test/data5.csv"
-            data_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/data5.csv"
+            data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/data1.csv"
+            # data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
             data = pd.read_csv(data_dir, header=None)
             state = data.iloc[0].to_numpy()
             npstate = np.array([np.fromstring(item[1:-1], sep=' ')
@@ -97,13 +117,16 @@ def read_data(if_all, if_delt, if_test, frame):
             npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
             npstate = normalize_data(npstate)
             npaction = normalize_data(npaction)
+            npstate = data_processing(npstate, delt, gripper_change_delt)
+            npaction = data_processing(npaction, delt, gripper_change_delt)
             if if_delt:
                 npaction = npaction - npstate # 使用相对值
             return npstate, npaction
     else:
         npstates = []
         npactions = []
-        csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/optimize/"
+        csv_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/"
+        # csv_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/optimize/"
         csv_files = glob.glob(csv_dir + "*.csv")
         for file in csv_files:
             data = pd.read_csv(file, header=None)
@@ -114,6 +137,8 @@ def read_data(if_all, if_delt, if_test, frame):
             npaction = np.array([np.fromstring(item[1:-1], sep=' ') for item in action])
             npstate = normalize_data(npstate)
             npaction = normalize_data(npaction)
+            npstate = data_processing(npstate, delt, gripper_change_delt)
+            npaction = data_processing(npaction, delt, gripper_change_delt)
             if if_delt:
                 npaction = npaction - npstate # 使用相对值
             lay_state, lay_action = overlay_frames(npstate, npaction, frame)
@@ -229,15 +254,20 @@ def MLP_train(if_train, if_test, if_run_model, if_all_data):
     # train
     if if_train:
         time = datetime.now()
-        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "MLP_run\\"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+        log_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2" + "/" + "MLP_run/"  + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
         os.makedirs(log_dir, exist_ok=True)
         writer = SummaryWriter(log_dir)
         model = MLPModel(input_dim, out_dim)  # 使用BC进行训练
+
+        if torch.cuda.is_available():
+            model = model.to("cuda")  # 将模型移动到GPU上
+            print("successful use GPU")
+
         criterion = nn.MSELoss()  # 损失函数：均方损失
         # criterion = nn.NLLLoss()  # 损失函数：负对数似然损失
         optimizer = optim.Adam(model.parameters(), lr=learning_rate) # 优化器
         npstate, npaciton = read_data(if_all=if_all_data, if_delt=False, if_test=False, frame=1) # 全部、不绝对值、不测试
-        dataset = TensorDataset(torch.Tensor(npstate), torch.Tensor(npaciton))
+        dataset = TensorDataset(torch.Tensor(npstate).to("cuda"), torch.Tensor(npaciton).to("cuda"))
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True) # shuffle=true打乱顺序抽取数据
         with tqdm(total=epochs, desc="Processing") as pbar:
             for epoch in range(epochs):
@@ -323,11 +353,16 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
     if if_train:
         
         time = datetime.now()
-        log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "MLP_run\\" + "new_run\\" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+        log_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2" + "/" + "MLP_run/" + "new_run/" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
         os.makedirs(log_dir, exist_ok=True)
         save_parameters_to_txt(log_dir = log_dir, frame = frame, learning_rate = learning_rate, batch_size = batch_size, if_all = if_all_data)
         writer = SummaryWriter(log_dir)
         model = MLPModel(input_dim, out_dim)  # 使用BC进行训练
+
+        if torch.cuda.is_available():
+            model = model.to("cuda")  # 将模型移动到GPU上
+            print("successful use GPU")
+
         criterion = nn.MSELoss()  # 损失函数：均方损失
         # criterion = nn.NLLLoss()  # 损失函数：负对数似然损失
         optimizer = optim.Adam(model.parameters(), lr=learning_rate) # 优化器
@@ -335,7 +370,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
 
         # npstate, npaciton = overlay_frames(npstate, npaciton, frame)
 
-        dataset = TensorDataset(torch.Tensor(npstate), torch.Tensor(npaciton))
+        dataset = TensorDataset(torch.Tensor(npstate).to("cuda"), torch.Tensor(npaciton).to("cuda"))
         dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True) # shuffle=true打乱顺序抽取数据
         with tqdm(total=epochs, desc="Processing") as pbar:
             for epoch in range(epochs):
@@ -404,15 +439,20 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
 def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     # 初始化模型
     input_size = 4  # 输入特征数
-    hidden_size = 64  # 隐藏层大小
+    hidden_size = 128  # 隐藏层大小
     output_size = 4  # 输出特征数（与输入的特征数相同）
     batch_size = 32
     save_model = 5000
     lr = 0.001
     num_epochs = 300000
     model = LSTMModel(input_size, hidden_size, output_size)
+
+    if torch.cuda.is_available():
+        model = model.to("cuda")  # 将模型移动到GPU上
+        print("successful use GPU")
+
     time = datetime.now()
-    log_dir = "B:/code/kortex/imitation_learning/v2" + "\\" + "LSTM_run\\" + "new_run\\" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+    log_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2" + "/" + "LSTM_run/" + "new_run/" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
     
 
     # 定义损失函数和优化器
@@ -422,12 +462,15 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     # 读取数据
     states, actions = read_data(if_all_data, False, False, 1)
 
-    states = torch.tensor(states, dtype=torch.float32)
-    actions = torch.tensor(actions, dtype=torch.float32)
+    actions = states[1:]
+    states = states[:-1]
+
+    states = torch.tensor(states, dtype=torch.float32).to("cuda")
+    actions = torch.tensor(actions, dtype=torch.float32).to("cuda")
 
     if if_train:
         os.makedirs(log_dir, exist_ok=True) 
-        save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data)
+        save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data, hidden_size=hidden_size)
         writer = SummaryWriter(log_dir)
 
         with tqdm(total=num_epochs, desc="Processing") as pbar:
@@ -504,6 +547,7 @@ if __name__ == '__main__':
     # main1 为普通的全连接网络
     # main2 为使用了帧叠加的全连接网络
     # main3 为LSTM网络
+    print(torch.cuda.is_available())
     main()
 
     # csv_dir = "B:/code/kortex/imitation_learning/v2/data/simulated_rule/"
@@ -515,3 +559,6 @@ if __name__ == '__main__':
 
 # python B:\code\kortex\imitation_learning\v2\BCTrain.py --net mlp --train --all_data --frame 5
 # python B:\code\kortex\imitation_learning\v2\BCTrain.py --net mlp --run_model --frame 5
+
+# python /home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/BCTrain.py --net lstm --train --frame 1
+# python /home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/BCTrain.py --net mlp --train --all_data --frame 4
