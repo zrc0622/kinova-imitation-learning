@@ -333,9 +333,9 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
     # frame = 5 # 叠加帧数
     input_dim = 4*frame
     out_dim = 4
-    learning_rate = 0.0005
+    learning_rate = 0.0001
     batch_size = 64
-    epochs = 300000
+    epochs = 200000
     save_interval = 1000
     print_loss = 10000
 
@@ -398,7 +398,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
                             initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))#[0.32018349 ,-0.00349947 , 0.12678419 , 0.36635616]
                             initial_input = np.tile(initial_input, (frame, 1))
                             initial_input = initial_input.flatten()
-                            outputs = run_model(model, initial_input, num_steps=150, frame=frame)
+                            outputs = run_model(model, initial_input, num_steps=200, frame=frame)
                             outputs = np.array(outputs)
                             outputs = origin_data(outputs)
                             pic_dir = os.path.join(plot_dir, f'model_epoch{epoch + 1}.png')
@@ -440,7 +440,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
             initial_input = np.tile(initial_input, (frame, 1))
             initial_input = initial_input.flatten()
             print(initial_input)
-            outputs = run_model(model, initial_input, num_steps=150, frame=frame)
+            outputs = run_model(model, initial_input, num_steps=200, frame=frame)
             outputs = np.array(outputs)
             outputs = origin_data(outputs)
             print(outputs)
@@ -453,9 +453,9 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     hidden_size = 128  # 隐藏层大小
     output_size = 4  # 输出特征数（与输入的特征数相同）
     batch_size = 32
-    save_model = 1000
-    lr = 0.0005
-    num_epochs = 100000
+    save_model = 5000
+    lr = 0.00005
+    num_epochs = 800000
     model = LSTMModel(input_size, hidden_size, output_size)
 
     if torch.cuda.is_available():
