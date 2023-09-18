@@ -416,14 +416,15 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
     if if_run_model:
         with torch.no_grad():
             model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\MLP_run\\new_run\\9_13_15_44\\model_epoch50000.pth'
-            model_path = "C:\\Users\\LEGION\\Desktop\\model_epoch75000.pth"
+            model_path = "C:\\Users\\LEGION\\Desktop\\model_epoch300000.pth"
             model = MLPModel(input_dim, out_dim)
             model.load_state_dict(torch.load(model_path))
             initial_input = normalize_data(np.array([ 2.99922740e-01, -3.85967414e-05,  2.99946854e-01,  2.65256679e-03]))#[0.32018349 ,-0.00349947 , 0.12678419 , 0.36635616]
+            # initial_input = normalize_data(np.array([ 0.32209696 ,-0.0033944  , 0.07708936 ,0.36431307]))
             initial_input = np.tile(initial_input, (frame, 1))
             initial_input = initial_input.flatten()
             print(initial_input)
-            outputs = run_model(model, initial_input, num_steps=50, frame=frame)
+            outputs = run_model(model, initial_input, num_steps=93, frame=frame)
             outputs = np.array(outputs)
             outputs = origin_data(outputs)
             print(outputs)
@@ -484,7 +485,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     # 使用模型生成轨迹
     if if_run_model:
         model_path = 'B:\\code\\kortex\\imitation_learning\\v2\\LSTM_run\\new_run\\9_15_19_6\\model_epoch50000.pth'
-        # model_path = "C:\\Users\\LEGION\\Desktop\\model_epoch145000.pth"
+        model_path = "C:\\Users\\LEGION\\Desktop\\model_epoch500000.pth"
         model = LSTMModel(input_size, hidden_size, output_size)
         model.load_state_dict(torch.load(model_path))
 
