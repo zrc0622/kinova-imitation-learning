@@ -453,9 +453,9 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     hidden_size = 128  # 隐藏层大小
     output_size = 4  # 输出特征数（与输入的特征数相同）
     batch_size = 32
-    save_model = 5000
-    lr = 0.00005
-    num_epochs = 800000
+    save_model = 100000
+    lr = 0.0001
+    num_epochs = 2000000
     model = LSTMModel(input_size, hidden_size, output_size)
 
     if torch.cuda.is_available():
