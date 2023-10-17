@@ -74,16 +74,17 @@ def overlay_frames(state, action, frame_length):
 
 # 读取数据
 def read_data(if_all, if_delt, if_test, frame):
-    delt = 5e-6
+    delt = 200e-6
+    print(delt)
     gripper_change_delt = 0.03/(0.36635616+0.000087572115)
 
     if frame == 1 or if_test:
-        if not if_test:
+        if not if_test: # 帧数为1
             # dir = str(Path.cwd())
             # data_dir = "./data/rule/data1.csv"
             # csv_dir = "./data/rule/"
             
-            data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/data1.csv"
+            data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/expert_data2/simulated_rule/new_hole_optimize2/data1.csv"
             csv_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/"
 
             # data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
@@ -105,9 +106,9 @@ def read_data(if_all, if_delt, if_test, frame):
             npaction = data_processing(npaction, delt, gripper_change_delt)
             if if_delt:
                 npaction = npaction - npstate # 使用相对值
-            return npstate, npaction
-        else:
-            data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/data1.csv"
+            return npstate, npaction, data_dir
+        else: # 测试
+            data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/expert_data2/simulated_rule/new_hole_optimize2/data1.csv"
             # data_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/optimize/data1.csv"
             data = pd.read_csv(data_dir, header=None)
             state = data.iloc[0].to_numpy()
@@ -148,7 +149,7 @@ def read_data(if_all, if_delt, if_test, frame):
         npactions = np.vstack(npactions)
         # print(npstates.shape)
         # print(npactions.shape)
-        return npstates, npactions
+        return npstates, npactions, csv_dir
 
 # 测试模型
 def run_model(model, initial_input, num_steps, frame):
@@ -358,7 +359,7 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
         plot_dir = log_dir + "/plot"
         os.makedirs(log_dir, exist_ok=True)
         os.makedirs(plot_dir, exist_ok=True)
-        save_parameters_to_txt(log_dir = log_dir, frame = frame, learning_rate = learning_rate, batch_size = batch_size, if_all = if_all_data)
+        
         writer = SummaryWriter(log_dir)
         model = MLPModel(input_dim, out_dim)  # 使用BC进行训练
 
@@ -369,8 +370,8 @@ def MLP_train_with_frame(if_train, if_test, if_run_model, frame, if_all_data):
         criterion = nn.MSELoss()  # 损失函数：均方损失
         # criterion = nn.NLLLoss()  # 损失函数：负对数似然损失
         optimizer = optim.Adam(model.parameters(), lr=learning_rate) # 优化器
-        npstate, npaciton = read_data(if_all=if_all_data, if_delt=False, if_test=False, frame=frame) # 全部、不绝对值、不测试
-
+        npstate, npaciton, data_dir = read_data(if_all=if_all_data, if_delt=False, if_test=False, frame=frame) # 全部、不绝对值、不测试
+        save_parameters_to_txt(log_dir = log_dir, frame = frame, learning_rate = learning_rate, batch_size = batch_size, if_all = if_all_data, data_dir=data_dir)
         # npstate, npaciton = overlay_frames(npstate, npaciton, frame)
 
         dataset = TensorDataset(torch.Tensor(npstate).to("cuda"), torch.Tensor(npaciton).to("cuda"))
@@ -463,7 +464,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
         print("successful use GPU")
 
     time = datetime.now()
-    log_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2" + "/" + "LSTM_run/" + "new_run/" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
+    log_dir = "/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2" + "/" + "LSTM_run/" + "expert_data2/" + "new_run/" + str(time.month) + '_' + str(time.day) + '_'  + str(time.hour) + '_' + str(time.minute)
     plot_dir = log_dir + "/plot"
 
     # 定义损失函数和优化器
@@ -471,7 +472,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     optimizer = optim.Adam(model.parameters(), lr=lr)
 
     # 读取数据
-    states, actions = read_data(if_all_data, False, False, 1)
+    states, actions, data_dir = read_data(if_all_data, False, False, 1)
 
     actions = states[1:]
     states = states[:-1]
@@ -482,7 +483,7 @@ def LSTM_train(if_train, if_test, if_run_model, if_all_data):
     if if_train:
         os.makedirs(log_dir, exist_ok=True) 
         os.makedirs(plot_dir, exist_ok=True)
-        save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data, hidden_size=hidden_size)
+        save_parameters_to_txt(log_dir = log_dir, learning_rate = lr, batch_size = batch_size, if_all = if_all_data, hidden_size=hidden_size, data_dir=data_dir)
         writer = SummaryWriter(log_dir)
 
         with tqdm(total=num_epochs, desc="Processing") as pbar:
@@ -585,5 +586,5 @@ if __name__ == '__main__':
 # python B:\code\kortex\imitation_learning\v2\BCTrain.py --net mlp --train --all_data --frame 5
 # python B:\code\kortex\imitation_learning\v2\BCTrain.py --net mlp --run_model --frame 5
 
-# python /home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/BCTrain.py --net lstm --train --frame 1
-# python /home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/BCTrain.py --net mlp --train --all_data --frame 4
+# CUDA_VISIBLE_DEVICES=2 python /home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/BCTrain.py --net lstm --train --frame 1
+# CUDA_VISIBLE_DEVICES=2 python /home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/BCTrain.py --net mlp --train --all_data --frame 4

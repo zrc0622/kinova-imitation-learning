@@ -188,7 +188,7 @@ def plot_4dnp(nparry, pic_dir):
         ax.plot([x[i - 1], x[i]], [y[i - 1], y[i]], [z[i - 1], z[i]], c=colors[i], markersize=4)
 
     # 绘制标准轨迹
-    data = pd.read_csv("/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/data/simulated_rule/data1.csv", header=None)
+    data = pd.read_csv("/home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/expert_data2/simulated_rule/new_hole_optimize2/data1.csv", header=None)
     state = data.iloc[0].to_numpy()
     npstate = np.array([np.fromstring(item[1:-1], sep=' ')
                     for item in state])  # 将state变为(?, 4)的格式，一行代表一个state

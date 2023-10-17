@@ -1,0 +1,7 @@
+*0.2+0.2
+-0.075
+*0.125+0.05
+*0.2
+
+pip install jupyter
+jupyter notebook /home/lsy/Projects/kinova-imitation-learning/imitation_learning/v2/test
